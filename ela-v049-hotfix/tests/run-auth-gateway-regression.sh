@@ -49,16 +49,32 @@ for _ in $(seq 1 40); do
 done
 
 HEALTH="$(curl -fsS http://127.0.0.1:3100/__ela/health)"
-grep -q '0.4.9-m4-auth-ux' <<<"$HEALTH"
+grep -q '0.4.9.3-m4-auth-role-ui' <<<"$HEALTH"
 grep -q '"authGateway":true' <<<"$HEALTH"
+grep -q '"accountTypeSelector":true' <<<"$HEALTH"
+grep -q '"topRightLogin":true' <<<"$HEALTH"
 
-LOGIN_HTML="$(curl -fsS 'http://127.0.0.1:3100/login?next=%2Fstudent%2Ftoday')"
-grep -q 'Đăng nhập' <<<"$LOGIN_HTML"
+LANDING_HTML="$(curl -fsS http://127.0.0.1:3100/)"
+grep -q 'id="topLoginButton"' <<<"$LANDING_HTML"
+grep -q '>Đăng nhập<' <<<"$LANDING_HTML"
+grep -q 'accountType=student' <<<"$LANDING_HTML"
+grep -q 'accountType=parent' <<<"$LANDING_HTML"
+grep -q 'accountType=teacher' <<<"$LANDING_HTML"
+grep -q 'accountType=admin' <<<"$LANDING_HTML"
+
+LOGIN_HTML="$(curl -fsS 'http://127.0.0.1:3100/login?accountType=parent&next=%2Fparent')"
+grep -q 'id="loginForm"' <<<"$LOGIN_HTML"
+grep -q 'id="accountType"' <<<"$LOGIN_HTML"
+grep -q '<option value="student"' <<<"$LOGIN_HTML"
+grep -q '<option value="parent" selected' <<<"$LOGIN_HTML"
+grep -q '<option value="teacher"' <<<"$LOGIN_HTML"
+grep -q '<option value="admin"' <<<"$LOGIN_HTML"
+grep -q 'Tài khoản này thuộc loại' <<<"$LOGIN_HTML"
 grep -q '/api/v1/auth/login' <<<"$LOGIN_HTML"
 
 HEADERS="$(curl -sS -D - -o /dev/null http://127.0.0.1:3100/student/today)"
 grep -qi '^HTTP/.* 302' <<<"$HEADERS"
-grep -qi '^location: /login?reason=required&next=%2Fstudent%2Ftoday' <<<"$HEADERS"
+grep -qi '^location: /login?reason=required&accountType=student&next=%2Fstudent%2Ftoday' <<<"$HEADERS"
 
 curl -fsS -c "$TMP/student.cookies" -H 'content-type: application/json' \
   -d '{"email":"student@example.com","password":"Demo123!"}' \
@@ -70,13 +86,14 @@ grep -q 'STUDENT' <<<"$SESSION"
 STUDENT_HTML="$(curl -fsS -b "$TMP/student.cookies" http://127.0.0.1:3100/student/today)"
 grep -q 'Kế hoạch hôm nay' <<<"$STUDENT_HTML"
 grep -q 'elaLogoutButton' <<<"$STUDENT_HTML"
+grep -q 'Học sinh' <<<"$STUDENT_HTML"
 grep -q 'nonce=' <<<"$STUDENT_HTML"
 if grep -q 'http://localhost:4000/api/v1' <<<"$STUDENT_HTML"; then
   echo 'API origin was not rewritten in HTML' >&2
   exit 1
 fi
 
-grep -q "fetch(\"/api/v1/auth/me\")" <(curl -fsS http://127.0.0.1:3100/_next/static/chunks/app.js)
+grep -q 'fetch("/api/v1/auth/me")' <(curl -fsS http://127.0.0.1:3100/_next/static/chunks/app.js)
 
 curl -fsS -c "$TMP/parent.cookies" -H 'content-type: application/json' \
   -d '{"email":"parent@example.com","password":"Demo123!"}' \
@@ -93,4 +110,4 @@ CSP="$(curl -sS -D - -o /dev/null -b "$TMP/parent.cookies" http://127.0.0.1:3100
 grep -qi '^content-security-policy:.*nonce-' <<<"$CSP"
 grep -qi '^x-frame-options: DENY' <<<"$CSP"
 
-echo 'v0.4.9 auth gateway regression: PASS'
+echo 'v0.4.9.3 auth role UI regression: PASS'
