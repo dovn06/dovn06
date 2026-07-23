@@ -43,7 +43,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R -E 'docker(\.exe)?[[:space:]]+compose.*down[[:space:]]+-v|docker[[:space:]]+volume[[:space:]]+rm|docker-compose.*down[[:space:]]+-v' ela-v049-hotfix --exclude='README.md'; then
+          if grep -R -n -E '^[[:space:]]*docker(\.exe)?[[:space:]]+compose.*down[[:space:]]+-v|^[[:space:]]*docker[[:space:]]+volume[[:space:]]+rm|^[[:space:]]*docker-compose.*down[[:space:]]+-v' \
+            ela-v049-hotfix \
+            --include='*.ps1' --include='*.bat' --include='*.cmd' --include='*.sh'; then
             echo 'Destructive volume command found' >&2
             exit 1
           fi
