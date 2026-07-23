@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9.4 Environment Recovery
+name: Build ELA v0.4.9.5 Offline Reuse
 
 on:
   push:
@@ -34,7 +34,8 @@ jobs:
             'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
             'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
             'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1'
+            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1'
           )) {
             $content = Get-Content $path -Raw
             [void][scriptblock]::Create($content)
@@ -46,18 +47,21 @@ jobs:
         run: |
           $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1' -SelfTest
           $output | Write-Host
-          if (($output -join "`n") -notmatch 'SELF_TEST_DOCKER_STDERR=PASS') {
-            throw 'Docker stderr regression did not pass.'
-          }
+          if (($output -join "`n") -notmatch 'SELF_TEST_DOCKER_STDERR=PASS') { throw 'Docker stderr regression did not pass.' }
 
       - name: Missing env recovery regression
         shell: pwsh
         run: |
           $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1' -EnvironmentSelfTest
           $output | Write-Host
-          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') {
-            throw 'Environment recovery regression did not pass.'
-          }
+          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') { throw 'Environment recovery regression did not pass.' }
+
+      - name: Offline reuse regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_OFFLINE_REUSE=PASS') { throw 'Offline reuse regression did not pass.' }
 
   test-and-package:
     needs: windows-launcher
@@ -76,24 +80,31 @@ jobs:
       - name: Parse PowerShell installers
         shell: pwsh
         run: |
-          foreach ($path in @(
-            'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1'
-          )) {
-            $content = Get-Content $path -Raw
+          foreach ($path in Get-ChildItem 'ela-v049-hotfix/scripts' -Filter '*.ps1') {
+            $content = Get-Content $path.FullName -Raw
             [void][scriptblock]::Create($content)
-            Write-Host "PowerShell parse PASS: $path"
+            Write-Host "PowerShell parse PASS: $($path.FullName)"
           }
+
+      - name: Check resilient Dockerfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in ela-v049-hotfix/patch/infrastructure/docker/*.Dockerfile; do
+            grep -q 'ela-pnpm-store' "$f"
+            grep -q 'fetch-retries 8' "$f"
+            grep -q 'prefer-offline' "$f"
+          done
+          grep -q -- '--no-build' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
+          grep -q '/app/apps/web/server.mjs' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
+          echo 'Offline reuse static regression: PASS'
 
       - name: Enforce volume preservation
         shell: bash
         run: |
           set -euo pipefail
           if grep -R -n -E '^[[:space:]]*docker(\.exe)?[[:space:]]+compose.*down[[:space:]]+-v|^[[:space:]]*docker[[:space:]]+volume[[:space:]]+rm|^[[:space:]]*docker-compose.*down[[:space:]]+-v' \
-            ela-v049-hotfix \
-            --include='*.ps1' --include='*.bat' --include='*.cmd' --include='*.sh'; then
+            ela-v049-hotfix --include='*.ps1' --include='*.bat' --include='*.cmd' --include='*.sh'; then
             echo 'Destructive volume command found' >&2
             exit 1
           fi
@@ -127,21 +138,21 @@ jobs:
           rm -rf dist/package/tests dist/package/logs
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.5_OfflineReuse.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip > EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
+            sha256sum EnglishLearningApp_v0.4.9.5_OfflineReuse.zip > EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip
-          cat dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.zip
+          cat dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9.4_EnvironmentRecovery
+          name: EnglishLearningApp_v0.4.9.5_OfflineReuse
           path: |
-            dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip
-            dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
+            dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.zip
+            dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
           if-no-files-found: error
           retention-days: 30
