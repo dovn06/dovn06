@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9.5 Offline Reuse
+name: Build ELA v0.4.9.6 Native Stderr Fix
 
 on:
   push:
@@ -30,16 +30,10 @@ jobs:
       - name: Parse PowerShell installers
         shell: pwsh
         run: |
-          foreach ($path in @(
-            'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1'
-          )) {
-            $content = Get-Content $path -Raw
+          foreach ($path in Get-ChildItem 'ela-v049-hotfix/scripts' -Filter '*.ps1') {
+            $content = Get-Content $path.FullName -Raw
             [void][scriptblock]::Create($content)
-            Write-Host "PowerShell parse PASS: $path"
+            Write-Host "PowerShell parse PASS: $($path.FullName)"
           }
 
       - name: Docker stderr exit-code regression
@@ -62,6 +56,13 @@ jobs:
           $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1' -SelfTest
           $output | Write-Host
           if (($output -join "`n") -notmatch 'SELF_TEST_OFFLINE_REUSE=PASS') { throw 'Offline reuse regression did not pass.' }
+
+      - name: Native stderr shim regression
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-v049-hotfix/scripts/Apply-V0496-NativeStderrFix.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_NATIVE_STDERR=PASS') { throw 'Native stderr shim regression did not pass.' }
 
   test-and-package:
     needs: windows-launcher
@@ -86,7 +87,7 @@ jobs:
             Write-Host "PowerShell parse PASS: $($path.FullName)"
           }
 
-      - name: Check resilient Dockerfiles
+      - name: Check offline and native stderr fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -97,7 +98,9 @@ jobs:
           done
           grep -q -- '--no-build' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
           grep -q '/app/apps/web/server.mjs' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
-          echo 'Offline reuse static regression: PASS'
+          grep -q '2>&1' ela-v049-hotfix/scripts/Apply-V0496-NativeStderrFix.ps1
+          grep -q 'Apply-V0496-NativeStderrFix.ps1' ela-v049-hotfix/00_AP_DUNG_V049_VA_CHAY.bat
+          echo 'Offline reuse and native stderr static regression: PASS'
 
       - name: Enforce volume preservation
         shell: bash
@@ -138,21 +141,21 @@ jobs:
           rm -rf dist/package/tests dist/package/logs
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9.5_OfflineReuse.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9.5_OfflineReuse.zip > EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
+            sha256sum EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip > EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.zip
-          cat dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip
+          cat dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9.5_OfflineReuse
+          name: EnglishLearningApp_v0.4.9.6_NativeStderrFix
           path: |
-            dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.zip
-            dist/EnglishLearningApp_v0.4.9.5_OfflineReuse.sha256
+            dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip
+            dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
           if-no-files-found: error
           retention-days: 30
