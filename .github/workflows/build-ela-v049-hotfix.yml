@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - artifact/ela-v049-auth-patch
+      - artifact/ela-v0493-role-login-ui
     paths:
       - 'ela-v049-hotfix/**'
       - '.github/workflows/build-ela-v049-hotfix.yml'
