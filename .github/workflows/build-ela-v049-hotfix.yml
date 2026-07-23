@@ -7,6 +7,12 @@ on:
     paths:
       - 'ela-v049-hotfix/**'
       - '.github/workflows/build-ela-v049-hotfix.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-v049-hotfix/**'
+      - '.github/workflows/build-ela-v049-hotfix.yml'
   workflow_dispatch:
 
 permissions:
