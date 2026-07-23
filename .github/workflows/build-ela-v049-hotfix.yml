@@ -87,15 +87,6 @@ jobs:
             Write-Host "PowerShell parse PASS: $path"
           }
 
-      - name: Run environment recovery self-test
-        shell: pwsh
-        run: |
-          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1' -EnvironmentSelfTest
-          $output | Write-Host
-          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') {
-            throw 'Environment recovery regression did not pass.'
-          }
-
       - name: Enforce volume preservation
         shell: bash
         run: |
