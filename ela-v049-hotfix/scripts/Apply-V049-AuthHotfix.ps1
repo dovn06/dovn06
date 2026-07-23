@@ -40,7 +40,7 @@ function Find-ProjectRoot {
         } catch { }
     }
 
-    Write-Host "" 
+    Write-Host ""
     Write-Host "Khong tu dong tim thay thu muc English Learning App." -ForegroundColor Yellow
     Write-Host "Hay nhap duong dan thu muc dang chua docker-compose.yml." -ForegroundColor Yellow
     $manual = Read-Host "Duong dan project (vi du E:\English\R9\EnglishLearningApp_M4_OneClick_v0.4.8_FIXED)"
@@ -113,19 +113,6 @@ function Wait-Http {
     return $false
 }
 
-function Update-PackageVersion {
-    param([string]$FilePath)
-    if (-not (Test-Path $FilePath)) { return }
-    try {
-        $json = Get-Content $FilePath -Raw | ConvertFrom-Json
-        $json.version = "0.4.9-m4-auth-ux"
-        $json | ConvertTo-Json -Depth 100 | Set-Content -Path $FilePath -Encoding UTF8
-        Write-Log "Da cap nhat version: $FilePath"
-    } catch {
-        Write-Log "Khong cap nhat duoc version trong $FilePath; bo qua de khong anh huong build. $($_.Exception.Message)" "WARN"
-    }
-}
-
 if (-not (Test-Path $PatchServer)) {
     throw "Thieu file patch: $PatchServer"
 }
@@ -155,14 +142,11 @@ try {
     Write-Log "Da backup Web runtime cu: $BackupServer"
     Write-Log "Da cai Web auth gateway v0.4.9: $TargetServer"
 
-    Update-PackageVersion (Join-Path $Root "package.json")
-    Update-PackageVersion (Join-Path $Root "apps\web\package.json")
-
     $Marker = @"
 English Learning App v0.4.9 Authentication UX Hotfix
 Applied at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 Previous web runtime backup: $BackupServer
-Data volumes were preserved. No docker compose down -v was executed.
+Data volumes were preserved. No destructive Docker volume command was executed.
 "@
     Set-Content -Path (Join-Path $Root "AUTH_V049_APPLIED.txt") -Value $Marker -Encoding UTF8
 
@@ -192,7 +176,7 @@ Data volumes were preserved. No docker compose down -v was executed.
     Write-Log "Web auth gateway v0.4.9 da san sang." "OK"
 
     $LoginCheck = "http://localhost:$WebPort/login?next=%2Fstudent%2Ftoday"
-    if (-not (Wait-Http $LoginCheck 60 'Đăng nhập')) { throw "Trang dang nhap khong tra ve noi dung mong doi." }
+    if (-not (Wait-Http $LoginCheck 60 'id="loginForm"')) { throw "Trang dang nhap khong tra ve noi dung mong doi." }
     Write-Log "Trang dang nhap da duoc kiem tra." "OK"
 
     $SnapshotLog = Join-Path $LogsDir "v049_docker_$Timestamp.log"
