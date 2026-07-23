@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9.2 Auth Hotfix
+name: Build ELA v0.4.9.3 Role Login UI
 
 on:
   push:
@@ -31,7 +31,8 @@ jobs:
         run: |
           foreach ($path in @(
             'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1'
+            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
           )) {
             $content = Get-Content $path -Raw
             [void][scriptblock]::Create($content)
@@ -66,7 +67,8 @@ jobs:
         run: |
           foreach ($path in @(
             'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1'
+            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
           )) {
             $content = Get-Content $path -Raw
             [void][scriptblock]::Create($content)
@@ -85,7 +87,7 @@ jobs:
           fi
           echo 'Volume preservation scan: PASS'
 
-      - name: Run auth gateway regression
+      - name: Run auth role UI regression
         shell: bash
         run: bash ela-v049-hotfix/tests/run-auth-gateway-regression.sh
 
@@ -109,21 +111,21 @@ jobs:
           rm -rf dist/package/tests
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9.2_AuthHotfix.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9.2_AuthHotfix.zip > EnglishLearningApp_v0.4.9.2_AuthHotfix.sha256
+            sha256sum EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip > EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9.2_AuthHotfix.zip
-          cat dist/EnglishLearningApp_v0.4.9.2_AuthHotfix.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
+          cat dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9.2_AuthHotfix
+          name: EnglishLearningApp_v0.4.9.3_RoleLoginUI
           path: |
-            dist/EnglishLearningApp_v0.4.9.2_AuthHotfix.zip
-            dist/EnglishLearningApp_v0.4.9.2_AuthHotfix.sha256
+            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
+            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
           if-no-files-found: error
           retention-days: 30
