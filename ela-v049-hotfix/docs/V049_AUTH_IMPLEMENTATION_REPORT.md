@@ -105,12 +105,12 @@ Khi áp dụng vào repository:
 ```text
 apps/web/server.mjs                         Thay thế
 apps/web/server.mjs.v048_backup_<time>     Tạo backup
-package.json                               Cập nhật version nếu parse được
-apps/web/package.json                      Cập nhật version nếu parse được
 AUTH_V049_APPLIED.txt                      Tạo marker
 logs/v049_auth_hotfix_<time>.log           Tạo log
 logs/v049_docker_<time>.log                Tạo Docker snapshot
 ```
+
+Installer không chỉnh sửa `package.json`, `pnpm-lock.yaml`, migration hoặc seed.
 
 ## 6. Dữ liệu
 
