@@ -1,0 +1,131 @@
+name: Build ELA v0.4.9.3 Role Login UI
+
+on:
+  push:
+    branches:
+      - artifact/ela-v049-auth-patch
+    paths:
+      - 'ela-v049-hotfix/**'
+      - '.github/workflows/build-ela-v049-hotfix.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-v049-hotfix/**'
+      - '.github/workflows/build-ela-v049-hotfix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-stderr:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell installers
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
+          )) {
+            $content = Get-Content $path -Raw
+            [void][scriptblock]::Create($content)
+            Write-Host "PowerShell parse PASS: $path"
+          }
+
+      - name: Docker stderr exit-code regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_DOCKER_STDERR=PASS') {
+            throw 'Docker stderr regression did not pass.'
+          }
+
+  test-and-package:
+    needs: windows-native-stderr
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Node runtime syntax
+        run: node --check ela-v049-hotfix/patch/apps/web/server.mjs
+
+      - name: Check mock API syntax
+        run: node --check ela-v049-hotfix/tests/mock-api.mjs
+
+      - name: Parse PowerShell installers
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
+          )) {
+            $content = Get-Content $path -Raw
+            [void][scriptblock]::Create($content)
+            Write-Host "PowerShell parse PASS: $path"
+          }
+
+      - name: Enforce volume preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E '^[[:space:]]*docker(\.exe)?[[:space:]]+compose.*down[[:space:]]+-v|^[[:space:]]*docker[[:space:]]+volume[[:space:]]+rm|^[[:space:]]*docker-compose.*down[[:space:]]+-v' \
+            ela-v049-hotfix \
+            --include='*.ps1' --include='*.bat' --include='*.cmd' --include='*.sh'; then
+            echo 'Destructive volume command found' >&2
+            exit 1
+          fi
+          echo 'Volume preservation scan: PASS'
+
+      - name: Run auth role UI regression
+        shell: bash
+        run: bash ela-v049-hotfix/tests/run-auth-gateway-regression.sh
+
+      - name: Check no secrets are packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f ela-v049-hotfix/.env
+          if grep -R -E '(JWT_SECRET=|DATABASE_URL=postgresql://[^<]|DEMO_PASSWORD=)' ela-v049-hotfix --exclude='README.md'; then
+            echo 'Potential runtime secret found' >&2
+            exit 1
+          fi
+          echo 'Secret scan: PASS'
+
+      - name: Build ZIP and SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package
+          cp -a ela-v049-hotfix/. dist/package/
+          rm -rf dist/package/tests
+          (
+            cd dist/package
+            zip -r ../EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip .
+          )
+          (
+            cd dist
+            sha256sum EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip > EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+          )
+          unzip -tq dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
+          cat dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnglishLearningApp_v0.4.9.3_RoleLoginUI
+          path: |
+            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
+            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+          if-no-files-found: error
+          retention-days: 30
