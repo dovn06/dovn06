@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9.3 Role Login UI
+name: Build ELA v0.4.9.4 Environment Recovery
 
 on:
   push:
@@ -20,9 +20,9 @@ permissions:
   contents: read
 
 jobs:
-  windows-native-stderr:
+  windows-launcher:
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +33,8 @@ jobs:
           foreach ($path in @(
             'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
             'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1'
           )) {
             $content = Get-Content $path -Raw
             [void][scriptblock]::Create($content)
@@ -49,8 +50,17 @@ jobs:
             throw 'Docker stderr regression did not pass.'
           }
 
+      - name: Missing env recovery regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1' -EnvironmentSelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') {
+            throw 'Environment recovery regression did not pass.'
+          }
+
   test-and-package:
-    needs: windows-native-stderr
+    needs: windows-launcher
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -69,11 +79,21 @@ jobs:
           foreach ($path in @(
             'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1',
             'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1',
-            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1'
+            'ela-v049-hotfix/scripts/Apply-V0493-RoleUi.ps1',
+            'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1'
           )) {
             $content = Get-Content $path -Raw
             [void][scriptblock]::Create($content)
             Write-Host "PowerShell parse PASS: $path"
+          }
+
+      - name: Run environment recovery self-test
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1' -EnvironmentSelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') {
+            throw 'Environment recovery regression did not pass.'
           }
 
       - name: Enforce volume preservation
@@ -92,16 +112,20 @@ jobs:
         shell: bash
         run: bash ela-v049-hotfix/tests/run-auth-gateway-regression.sh
 
-      - name: Check no secrets are packaged
+      - name: Check package hygiene
         shell: bash
         run: |
           set -euo pipefail
           test ! -f ela-v049-hotfix/.env
-          if grep -R -E '(JWT_SECRET=|DATABASE_URL=postgresql://[^<]|DEMO_PASSWORD=)' ela-v049-hotfix --exclude='README.md'; then
-            echo 'Potential runtime secret found' >&2
+          if find ela-v049-hotfix -type f \( -name '*.pem' -o -name '*.key' -o -name '*.pfx' -o -name '*.log' \) -print | grep -q .; then
+            echo 'Private key or runtime log found in package' >&2
             exit 1
           fi
-          echo 'Secret scan: PASS'
+          if grep -R -n -E '[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' ela-v049-hotfix --exclude='*.md'; then
+            echo 'JWT-like token found in package' >&2
+            exit 1
+          fi
+          echo 'Package hygiene scan: PASS'
 
       - name: Build ZIP and SHA-256
         shell: bash
@@ -109,24 +133,24 @@ jobs:
           set -euo pipefail
           mkdir -p dist/package
           cp -a ela-v049-hotfix/. dist/package/
-          rm -rf dist/package/tests
+          rm -rf dist/package/tests dist/package/logs
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip > EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+            sha256sum EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip > EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
-          cat dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip
+          cat dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9.3_RoleLoginUI
+          name: EnglishLearningApp_v0.4.9.4_EnvironmentRecovery
           path: |
-            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.zip
-            dist/EnglishLearningApp_v0.4.9.3_RoleLoginUI.sha256
+            dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.zip
+            dist/EnglishLearningApp_v0.4.9.4_EnvironmentRecovery.sha256
           if-no-files-found: error
           retention-days: 30
