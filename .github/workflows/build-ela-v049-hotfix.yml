@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9 Auth Hotfix
+name: Build ELA v0.4.9.1 Auth Hotfix
 
 on:
   push:
@@ -21,7 +21,7 @@ permissions:
 jobs:
   test-and-package:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,6 +38,47 @@ jobs:
           $content = Get-Content 'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1' -Raw
           [void][scriptblock]::Create($content)
           Write-Host 'PowerShell parse: PASS'
+
+      - name: Regression - auto find sibling project and accept spaces
+        shell: pwsh
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP 'ELA English Path Test'
+          $hotfix = Join-Path $base 'R10\v049-hotfix'
+          $project = Join-Path $base 'R9\EnglishLearningApp M4 v048'
+          New-Item -ItemType Directory -Force -Path (Join-Path $hotfix 'scripts') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $project 'apps\web') | Out-Null
+          Copy-Item 'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1' (Join-Path $hotfix 'scripts\Apply-V049-AuthHotfix.ps1') -Force
+          Set-Content (Join-Path $project 'docker-compose.yml') 'services: {}'
+          Set-Content (Join-Path $project 'package.json') '{"name":"ela-path-test"}'
+          Set-Content (Join-Path $project 'apps\web\server.mjs') 'console.log("test")'
+          Push-Location $hotfix
+          try {
+            $output = & pwsh -NoProfile -File (Join-Path $hotfix 'scripts\Apply-V049-AuthHotfix.ps1') -DiscoveryOnly 2>&1 | Out-String
+          } finally {
+            Pop-Location
+          }
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) { throw "DiscoveryOnly failed with exit code $LASTEXITCODE" }
+          if (-not $output.Contains("DISCOVERED_PROJECT_ROOT=$project")) {
+            throw "Sibling project was not auto-discovered. Expected: $project"
+          }
+          Write-Host 'Sibling path discovery: PASS'
+
+      - name: Regression - explicit project path and quoted path
+        shell: pwsh
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP 'ELA Explicit Path Test'
+          $project = Join-Path $base 'EnglishLearningApp Project'
+          New-Item -ItemType Directory -Force -Path (Join-Path $project 'apps\web') | Out-Null
+          Set-Content (Join-Path $project 'docker-compose.yml') 'services: {}'
+          Set-Content (Join-Path $project 'package.json') '{"name":"ela-explicit-test"}'
+          Set-Content (Join-Path $project 'apps\web\server.mjs') 'console.log("test")'
+          $quoted = '"' + $project + '"'
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V049-AuthHotfix.ps1' -ProjectRoot $quoted -DiscoveryOnly 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) { throw "Explicit discovery failed with exit code $LASTEXITCODE" }
+          if (-not $output.Contains("DISCOVERED_PROJECT_ROOT=$project")) { throw 'Quoted explicit path was not accepted' }
+          Write-Host 'Explicit/quoted path discovery: PASS'
 
       - name: Enforce volume preservation
         shell: bash
@@ -72,24 +113,24 @@ jobs:
           set -euo pipefail
           mkdir -p dist/package
           cp -a ela-v049-hotfix/. dist/package/
-          rm -rf dist/package/tests
+          rm -rf dist/package/tests dist/package/logs
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9_AuthHotfix.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9_AuthHotfix.zip > EnglishLearningApp_v0.4.9_AuthHotfix.sha256
+            sha256sum EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.zip > EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9_AuthHotfix.zip
-          cat dist/EnglishLearningApp_v0.4.9_AuthHotfix.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.zip
+          cat dist/EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9_AuthHotfix
+          name: EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix
           path: |
-            dist/EnglishLearningApp_v0.4.9_AuthHotfix.zip
-            dist/EnglishLearningApp_v0.4.9_AuthHotfix.sha256
+            dist/EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.zip
+            dist/EnglishLearningApp_v0.4.9.1_AuthHotfix_PathFix.sha256
           if-no-files-found: error
           retention-days: 30
