@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## 0.4.9.3-m4-auth-role-ui — 2026-07-23
+
+### Added
+
+- Nút **Đăng nhập** cố định tại góc phải trên cùng khi chưa có phiên.
+- Thanh tài khoản góc phải hiển thị tên, loại tài khoản và nút Đăng xuất khi đã đăng nhập.
+- Bộ chọn loại tài khoản tại `/login`: Học sinh, Phụ huynh, Giáo viên và Quản trị.
+- Các thẻ portal tự mở login với loại tài khoản tương ứng được chọn sẵn.
+- Health flags `accountTypeSelector` và `topRightLogin`.
+- Installer Windows v0.4.9.3 và regression test tương ứng.
+
+### Changed
+
+- Redirect anonymous tới login kèm `accountType` và deep link `next`.
+- Điều hướng sau đăng nhập dựa trên cả lựa chọn giao diện và vai trò thật từ API.
+- Portal toolbar hiển thị nhãn vai trò thân thiện.
+
+### Fixed
+
+- Không còn vùng trống ở góc phải trang chủ khi chưa đăng nhập.
+- Chọn sai loại tài khoản không giữ lại phiên đăng nhập và không mở sai portal.
+- Nút đăng nhập cũng xuất hiện trên các trang public được phục vụ từ static export.
+
+### Security
+
+- Loại tài khoản do người dùng chọn không làm thay đổi RBAC.
+- Quyền thực tế vẫn lấy từ JWT/session và được kiểm tra ở Web guard lẫn API.
+- Không nhúng tài khoản hoặc mật khẩu demo vào production JavaScript.
+
+### Data safety
+
+- Không thay đổi database schema hoặc seed.
+- Không chạy `docker compose down -v`.
+- Không xóa PostgreSQL hoặc MinIO volume.
+
 ## 0.4.9-m4-auth-ux — 2026-07-23
 
 ### Added
