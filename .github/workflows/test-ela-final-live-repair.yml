@@ -7,6 +7,12 @@ on:
     paths:
       - 'ela-final-live-repair/**'
       - '.github/workflows/test-ela-final-live-repair.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-final-live-repair/**'
+      - '.github/workflows/test-ela-final-live-repair.yml'
   workflow_dispatch:
 
 permissions:
