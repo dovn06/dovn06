@@ -19,7 +19,7 @@ function Write-Stage {
 
 function Write-Utf8NoBom {
     param([string]$Path, [string]$Content)
-    $encoding = New-Object System.Text.UTF8Encoding($false)
+    $encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
     [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
@@ -30,8 +30,10 @@ function Read-EnvironmentMap {
     foreach ($line in Get-Content -LiteralPath $Path) {
         $trimmed = ([string]$line).Trim()
         if (-not $trimmed -or $trimmed.StartsWith('#') -or $trimmed.IndexOf('=') -lt 1) { continue }
-        $parts = $trimmed.Split(@('='), 2)
-        $map[$parts[0].Trim()] = $parts[1].Trim()
+        $separator = $trimmed.IndexOf('=')
+        $name = $trimmed.Substring(0, $separator).Trim()
+        $value = $trimmed.Substring($separator + 1).Trim()
+        $map[$name] = $value
     }
     return $map
 }
