@@ -1,4 +1,4 @@
-name: Build ELA v0.4.9.6 Native Stderr Fix
+name: Build ELA v0.4.9.8 Full Launcher Fix
 
 on:
   push:
@@ -34,6 +34,16 @@ jobs:
             $content = Get-Content $path.FullName -Raw
             [void][scriptblock]::Create($content)
             Write-Host "PowerShell parse PASS: $($path.FullName)"
+          }
+
+      - name: Full environment Windows PowerShell 5.1 regression
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-v049-hotfix/scripts/Prepare-Full-Environment-v0498.ps1' -RootDir $env:RUNNER_TEMP -SelfTest
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if ($exitCode -ne 0 -or (($output -join "`n") -notmatch 'SELF_TEST_FULL_ENV=PASS')) {
+            throw "Full environment regression failed with exit code $exitCode."
           }
 
       - name: Docker stderr exit-code regression
@@ -86,6 +96,19 @@ jobs:
             [void][scriptblock]::Create($content)
             Write-Host "PowerShell parse PASS: $($path.FullName)"
           }
+
+      - name: Check full environment compatibility fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          script='ela-v049-hotfix/scripts/Prepare-Full-Environment-v0498.ps1'
+          grep -q 'System.Text.UTF8Encoding' "$script"
+          grep -q 'SELF_TEST_FULL_ENV=PASS' "$script"
+          if grep -q 'New-Object Text.UTF8Encoding' "$script"; then
+            echo 'Abbreviated UTF8Encoding constructor is still present' >&2
+            exit 1
+          fi
+          echo 'Full environment compatibility static regression: PASS'
 
       - name: Check offline and native stderr fixes
         shell: bash
@@ -141,21 +164,21 @@ jobs:
           rm -rf dist/package/tests dist/package/logs
           (
             cd dist/package
-            zip -r ../EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip .
+            zip -r ../EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip .
           )
           (
             cd dist
-            sha256sum EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip > EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
+            sha256sum EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip > EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
           )
-          unzip -tq dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip
-          cat dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
+          unzip -tq dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip
+          cat dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: EnglishLearningApp_v0.4.9.6_NativeStderrFix
+          name: EnglishLearningApp_v0.4.9.8_FullLauncherFix
           path: |
-            dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.zip
-            dist/EnglishLearningApp_v0.4.9.6_NativeStderrFix.sha256
+            dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip
+            dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
           if-no-files-found: error
           retention-days: 30
