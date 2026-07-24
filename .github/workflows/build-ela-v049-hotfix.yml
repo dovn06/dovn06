@@ -1,0 +1,184 @@
+name: Build ELA v0.4.9.8 Full Launcher Fix
+
+on:
+  push:
+    branches:
+      - artifact/ela-v049-auth-patch
+      - artifact/ela-v0493-role-login-ui
+    paths:
+      - 'ela-v049-hotfix/**'
+      - '.github/workflows/build-ela-v049-hotfix.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-v049-hotfix/**'
+      - '.github/workflows/build-ela-v049-hotfix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell installers
+        shell: pwsh
+        run: |
+          foreach ($path in Get-ChildItem 'ela-v049-hotfix/scripts' -Filter '*.ps1') {
+            $content = Get-Content $path.FullName -Raw
+            [void][scriptblock]::Create($content)
+            Write-Host "PowerShell parse PASS: $($path.FullName)"
+          }
+
+      - name: Full environment Windows PowerShell 5.1 regression
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-v049-hotfix/scripts/Prepare-Full-Environment-v0498.ps1' -RootDir $env:RUNNER_TEMP -SelfTest
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if ($exitCode -ne 0 -or (($output -join "`n") -notmatch 'SELF_TEST_FULL_ENV=PASS')) {
+            throw "Full environment regression failed with exit code $exitCode."
+          }
+
+      - name: Docker stderr exit-code regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0492-AuthHotfix.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_DOCKER_STDERR=PASS') { throw 'Docker stderr regression did not pass.' }
+
+      - name: Missing env recovery regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0494-EnvironmentRecovery.ps1' -EnvironmentSelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_ENV_RECOVERY=PASS') { throw 'Environment recovery regression did not pass.' }
+
+      - name: Offline reuse regression
+        shell: pwsh
+        run: |
+          $output = & pwsh -NoProfile -File 'ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_OFFLINE_REUSE=PASS') { throw 'Offline reuse regression did not pass.' }
+
+      - name: Native stderr shim regression
+        shell: pwsh
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-v049-hotfix/scripts/Apply-V0496-NativeStderrFix.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_NATIVE_STDERR=PASS') { throw 'Native stderr shim regression did not pass.' }
+
+  test-and-package:
+    needs: windows-launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Node runtime syntax
+        run: node --check ela-v049-hotfix/patch/apps/web/server.mjs
+
+      - name: Check mock API syntax
+        run: node --check ela-v049-hotfix/tests/mock-api.mjs
+
+      - name: Parse PowerShell installers
+        shell: pwsh
+        run: |
+          foreach ($path in Get-ChildItem 'ela-v049-hotfix/scripts' -Filter '*.ps1') {
+            $content = Get-Content $path.FullName -Raw
+            [void][scriptblock]::Create($content)
+            Write-Host "PowerShell parse PASS: $($path.FullName)"
+          }
+
+      - name: Check full environment compatibility fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          script='ela-v049-hotfix/scripts/Prepare-Full-Environment-v0498.ps1'
+          grep -q 'System.Text.UTF8Encoding' "$script"
+          grep -q 'SELF_TEST_FULL_ENV=PASS' "$script"
+          if grep -q 'New-Object Text.UTF8Encoding' "$script"; then
+            echo 'Abbreviated UTF8Encoding constructor is still present' >&2
+            exit 1
+          fi
+          echo 'Full environment compatibility static regression: PASS'
+
+      - name: Check offline and native stderr fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in ela-v049-hotfix/patch/infrastructure/docker/*.Dockerfile; do
+            grep -q 'ela-pnpm-store' "$f"
+            grep -q 'fetch-retries 8' "$f"
+            grep -q 'prefer-offline' "$f"
+          done
+          grep -q -- '--no-build' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
+          grep -q '/app/apps/web/server.mjs' ela-v049-hotfix/scripts/Apply-V0495-OfflineReuse.ps1
+          grep -q '2>&1' ela-v049-hotfix/scripts/Apply-V0496-NativeStderrFix.ps1
+          grep -q 'Apply-V0496-NativeStderrFix.ps1' ela-v049-hotfix/00_AP_DUNG_V049_VA_CHAY.bat
+          echo 'Offline reuse and native stderr static regression: PASS'
+
+      - name: Enforce volume preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E '^[[:space:]]*docker(\.exe)?[[:space:]]+compose.*down[[:space:]]+-v|^[[:space:]]*docker[[:space:]]+volume[[:space:]]+rm|^[[:space:]]*docker-compose.*down[[:space:]]+-v' \
+            ela-v049-hotfix --include='*.ps1' --include='*.bat' --include='*.cmd' --include='*.sh'; then
+            echo 'Destructive volume command found' >&2
+            exit 1
+          fi
+          echo 'Volume preservation scan: PASS'
+
+      - name: Run auth role UI regression
+        shell: bash
+        run: bash ela-v049-hotfix/tests/run-auth-gateway-regression.sh
+
+      - name: Check package hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f ela-v049-hotfix/.env
+          if find ela-v049-hotfix -type f \( -name '*.pem' -o -name '*.key' -o -name '*.pfx' -o -name '*.log' \) -print | grep -q .; then
+            echo 'Private key or runtime log found in package' >&2
+            exit 1
+          fi
+          if grep -R -n -E '[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' ela-v049-hotfix --exclude='*.md'; then
+            echo 'JWT-like token found in package' >&2
+            exit 1
+          fi
+          echo 'Package hygiene scan: PASS'
+
+      - name: Build ZIP and SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package
+          cp -a ela-v049-hotfix/. dist/package/
+          rm -rf dist/package/tests dist/package/logs
+          (
+            cd dist/package
+            zip -r ../EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip .
+          )
+          (
+            cd dist
+            sha256sum EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip > EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
+          )
+          unzip -tq dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip
+          cat dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnglishLearningApp_v0.4.9.8_FullLauncherFix
+          path: |
+            dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.zip
+            dist/EnglishLearningApp_v0.4.9.8_FullLauncherFix.sha256
+          if-no-files-found: error
+          retention-days: 30
