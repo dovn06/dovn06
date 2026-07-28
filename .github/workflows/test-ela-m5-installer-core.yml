@@ -1,0 +1,40 @@
+name: Test ELA M5 Installer Core
+
+on:
+  push:
+    branches:
+      - artifact/ela-m5-speaking-ai-v050
+    paths:
+      - 'ela-m5-ci/**'
+      - '.github/workflows/test-ela-m5-installer-core.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-m5-ci/**'
+      - '.github/workflows/test-ela-m5-installer-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-powershell-51:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse installer core
+        shell: powershell
+        run: |
+          $content = Get-Content 'ela-m5-ci/M5-Installer-Core.ps1' -Raw
+          [void][scriptblock]::Create($content)
+          Write-Host 'M5_INSTALLER_PARSE=PASS'
+      - name: Run stdout stderr and quoting regression
+        shell: powershell
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-m5-ci/M5-Installer-Core.ps1' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_M5_INSTALLER_CORE=PASS') {
+            throw 'M5 installer core regression failed.'
+          }

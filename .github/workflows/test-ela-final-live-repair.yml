@@ -1,0 +1,52 @@
+name: Test ELA Final Live Repair v0.4.10.0
+
+on:
+  push:
+    branches:
+      - artifact/ela-final-live-repair-v04100
+    paths:
+      - 'ela-final-live-repair/**'
+      - '.github/workflows/test-ela-final-live-repair.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ela-final-live-repair/**'
+      - '.github/workflows/test-ela-final-live-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-powershell-51:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse script with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $content = Get-Content 'ela-final-live-repair/scripts/Final-Live-Repair.ps1' -Raw
+          [void][scriptblock]::Create($content)
+          Write-Host 'POWERSHELL_PARSE=PASS'
+
+      - name: Run final live repair self-test
+        shell: powershell
+        run: |
+          $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'ela-final-live-repair/scripts/Final-Live-Repair.ps1' -PackageRoot 'ela-final-live-repair' -SelfTest
+          $output | Write-Host
+          if (($output -join "`n") -notmatch 'SELF_TEST_FINAL_LIVE_REPAIR=PASS') {
+            throw 'Final live repair self-test failed.'
+          }
+
+      - name: Verify no destructive Docker commands
+        shell: powershell
+        run: |
+          $text = Get-Content 'ela-final-live-repair/scripts/Final-Live-Repair.ps1' -Raw
+          foreach ($bad in @('compose down', 'volume rm', 'system prune', 'image prune')) {
+            if ($text -match [regex]::Escape($bad)) { throw "Destructive command found: $bad" }
+          }
+          Write-Host 'DATA_SAFETY_SCAN=PASS'
